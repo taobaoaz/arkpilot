@@ -1,0 +1,20 @@
+{
+  "mcpServers": {
+    "harmonyos-dev": {
+      "command": "node",
+      "args": ["${CLAUDE_PLUGIN_ROOT}/dist/mcp/server.js"],
+      "cwd": "${CLAUDE_PROJECT_DIR}",
+      "env": {
+        "HARMONYOS_PLUGIN_DATA": "${CLAUDE_PLUGIN_DATA}",
+        "HARMONYOS_PLUGIN_SDK_PATH": "${user_config.sdk_path}",
+        "HARMONYOS_PLUGIN_API_LEVEL": "${user_config.api_level}",
+        "HARMONYOS_PLUGIN_HVIGOR_VERSION": "${user_config.hvigor_version}",
+        "HARMONYOS_PLUGIN_COMPATIBLE_SDK": "${user_config.compatible_sdk}",
+        "HARMONYOS_PLUGIN_DEV_MANAGE": "${user_config.dev_manage}",
+        "HARMONYOS_PLUGIN_HDC_PATH": "${user_config.hdc_path}",
+        "HARMONYOS_PLUGIN_NODE_MAJOR": "${user_config.node_major}",
+        "HARMONYOS_PLUGIN_JDK_MAJOR": "${user_config.jdk_major}"
+      }
+    }
+  }
+}
