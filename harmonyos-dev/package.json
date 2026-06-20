@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json.schemastore.org/package.json",
+  "name": "@zcode/harmonyos-dev-plugin",
+  "version": "0.1.0",
+  "private": true,
+  "license": "MIT",
+  "bin": { "harmonyos-dev-mcp": "./dist/mcp/server.js" },
+  "type": "module",
+  "main": "./dist/mcp/server.js",
+  "types": "./dist/mcp/server.d.ts",
+  "exports": {
+    "./mcp": { "types": "./dist/mcp/server.d.ts", "import": "./dist/mcp/server.js" }
+  },
+  "scripts": {
+    "build": "tsc && node esbuild.config.mjs",
+    "clean": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\"",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run test"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.27.1",
+    "json5": "^2.2.3",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "esbuild": "^0.25.0",
+    "typescript": "^5.9.0",
+    "vitest": "^4.1.5"
+  }
+}
