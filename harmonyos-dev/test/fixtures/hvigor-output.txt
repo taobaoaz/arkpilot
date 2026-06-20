@@ -1,0 +1,4 @@
+> hvigorw assembleHap --debug
+> hvigor entry:assembleHap
+BUILD SUCCESSFUL in 12s
+hap: /proj/entry/build/default/outputs/default/entry-default-signed.hap
