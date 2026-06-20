@@ -399,7 +399,7 @@ httpJson(url, { timeout?: 15000, headers? }): Promise<{ ok; status; json?; error
 - **非阻塞、可插拔** —— 放在 preflight 之后、discover 之前作为「可选建议步骤」;模型也可在用户问"环境是不是最新的"时单独调用
 - 检查到过时项时,SKILL 指示:告知用户具体差异 + 建议动作,**不自动升级**;若用户同意升级,走 INSTALL_ENVIRONMENT.md 且安装命令需用户确认
 
-### 3.16 P0 工具总清单(共 23 个)
+### 3.16 P0 工具总清单(共 25 个)
 
 | 类别 | 工具 |
 |---|---|
@@ -446,7 +446,7 @@ httpJson(url, { timeout?: 15000, headers? }): Promise<{ ok; status; json?; error
 
 ### 4.1 `src/mcp/server.ts`
 
-- 导入 23 个工具的 `{name, description, schema, handler}` 注册表
+- 导入 25 个工具的 `{name, description, schema, handler}` 注册表
 - `ListTools`:返回 name + description + inputSchema(zod → JSON Schema)
 - `CallTool`:按 name 路由,handler 包 `asyncWrap` 捕获异常转 `{ok:false, output:"<tool> failed: <msg>"}`,**server 不崩**
 - `server.connect(new StdioServerTransport())`
@@ -600,7 +600,7 @@ and verify with a screenshot.
 - `scaffold.test.ts`:临时工程 fixture,验证 create_page 的 main_pages.json 联动、create_ability 的 module.json5 更新(JSON5 注释保留)
 - `updates.test.ts`:mock `httpJson`(lib/http.ts)返回固定官方版本,验证 5 类检查项的 `outdated` 语义化版本比较、网络失败单项降级(`latest=undefined` 不阻断)、离线模式、5 分钟缓存命中与 `force` 绕过;版本比较边界(5.0.0 vs 5.0.1、12 vs 13、无法比较时保守判定)
 
-**第 3 层 server 集成测试:** 启动真实 stdio server 子进程,MCP 客户端发 `tools/list` 验证 23 个工具名 + schema;发 `tools/call` 对 preflight(只读安全)验证返回结构;注入会 throw 的 handler 验证 asyncWrap 返回 `{ok:false}` 且 server 存活。
+**第 3 层 server 集成测试:** 启动真实 stdio server 子进程,MCP 客户端发 `tools/list` 验证 25 个工具名 + schema;发 `tools/call` 对 preflight(只读安全)验证返回结构;注入会 throw 的 handler 验证 asyncWrap 返回 `{ok:false}` 且 server 存活。
 
 **不测:** 真实 hdc/hvigorw 端到端(依赖真机/模拟器,CI 不稳定);INSTALL_ENVIRONMENT.md 的安装命令(会改系统)。
 
@@ -608,7 +608,7 @@ and verify with a screenshot.
 
 ### 7.1 P0 包含
 
-- 23 个 MCP 工具(见 3.16),含在线版本检查工具 `harmony_check_updates`
+- 25 个 MCP 工具(见 3.16),含在线版本检查工具 `harmony_check_updates`
 - 完整 SKILL 工作流(7 步,含可选 check_updates)+ INSTALL_ENVIRONMENT.md
 - `/harmonyos-dev` 斜杠命令
 - 8 项 userConfig
@@ -630,7 +630,7 @@ and verify with a screenshot.
 
 - [ ] `pnpm build` 产出 `dist/mcp/server.js` 无类型错误
 - [ ] `pnpm test` 三层测试全绿
-- [ ] `node dist/mcp/server.js` 启动 stdio server,响应 `tools/list` 返回 23 个工具
+- [ ] `node dist/mcp/server.js` 启动 stdio server,响应 `tools/list` 返回 25 个工具
 - [ ] 在空目录创建工程:`harmony_create_app` → 生成最小 Stage 工程结构完整
 - [ ] 在有真机的环境:`harmony_preflight` → `harmony_build_and_run` → App 在设备启动
 - [ ] `harmony_screenshot` 产出可被 Read 工具打开的 jpeg
