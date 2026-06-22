@@ -261,7 +261,7 @@ function zodToJsonSchema(_schema: z.ZodType<any>): any {
 }
 
 const server = new Server(
-  { name: "harmonyos-dev", version: "0.1.0" },
+  { name: "harmonyos-dev", version: "0.2.0" },
   { capabilities: { tools: {} } },
 );
 
