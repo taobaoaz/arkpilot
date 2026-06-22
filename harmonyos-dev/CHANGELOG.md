@@ -4,6 +4,31 @@ All notable changes to arkpilot (the `harmonyos-dev` ZCode plugin) are documente
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0] - 2026-06-23
+
+### BREAKING
+
+- Plugin renamed: `harmonyos-dev` → `arkpilot`. Update your `~/.zcode/cli/config.json`:
+  ```diff
+  -  "enabledPlugins": { "harmonyos-dev@local": true }
+  +  "enabledPlugins": { "arkpilot@local": true }
+  ```
+  The MCP server is now named `arkpilot`; tools are exposed as `mcp__arkpilot__<tool>`.
+  Plugin internal npm name also changes from `@zcode/harmonyos-dev-plugin` → `@zcode/arkpilot-plugin`.
+
+### Removed
+
+- 5 `appstore_*` tools (`appstore_search`, `appstore_categories`, `appstore_list_by_category`, `appstore_detail`, `appstore_check`) split out to the companion plugin **[taobaoaz/arkgallery](https://github.com/taobaoaz/arkgallery)**. The new plugin adds an `appstore_icon` tool (icon proxy) on top.
+- The `appstore-crawl` script and its weekly GitHub Actions workflow (`appstore-latest` release asset) are also removed from this repo. They now live in arkgallery (or — more accurately — are no longer needed, since the new pass-through architecture doesn't publish bulk data).
+- `playwright` removed from `optionalDependencies` (the only consumer was the deleted `appstore_*` browser fallback). The plugin is now slimmer.
+
+### Changed
+
+- Tool count: 30 → 25 (only `harmony_*`).
+- Test count: 82 → 62 (drop the 20 `appstore_*` tests).
+- README rewritten to drop the AppGallery section, surface the sister plugin, and call out the v0.3.0 BREAKING change.
+- `User-Agent` for any HTTP calls this plugin makes: `ZCode-harmonyos-dev-plugin/0.2.0` → `ZCode-arkpilot-plugin/0.3.0`.
+
 ## [0.2.0] - 2026-06-22
 
 ### Added

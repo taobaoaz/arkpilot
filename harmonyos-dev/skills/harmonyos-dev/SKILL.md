@@ -1,7 +1,11 @@
 ---
-name: harmonyos-dev
-description: 通过 harmonyos-dev MCP 工具构建、运行、检查并自动化 HarmonyOS NEXT (ArkTS) 应用,或查询华为应用市场应用信息。
+name: arkpilot
+description: 通过 arkpilot MCP 工具构建、运行、检查并自动化 HarmonyOS NEXT (ArkTS) 应用。
 ---
+
+# Arkpilot
+
+AppGallery 工具(`appstore_*`)已拆出到独立插件 [taobaoaz/arkgallery](https://github.com/taobaoaz/arkgallery)。本仓库只提供 25 个 `harmony_*` 工具。
 
 # HarmonyOS Dev
 
@@ -9,7 +13,7 @@ Use this skill when the user wants to create, modify, build, run, debug, screens
 
 ## ZCode Tool Names
 
-MCP server 配置为 `harmonyos-dev`,工具暴露为 `mcp__harmonyos_dev__<tool>`。
+MCP server 配置为 `arkpilot`,工具暴露为 `mcp__arkpilot__<tool>`。
 
 ## Default Workflow
 
@@ -59,3 +63,5 @@ MCP server 配置为 `harmonyos-dev`,工具暴露为 `mcp__harmonyos_dev__<tool>
 ## Extension Point
 
 后端隔离:后续可映射同一操作到 DevEco 语义工具 / 更丰富 UiTest / 其他桥接,不改 SKILL 工作流。
+
+AppGallery 工具(5 个 `appstore_*`)已迁出到独立插件 [taobaoaz/arkgallery](https://github.com/taobaoaz/arkgallery)。本仓库不再提供 `appstore_*` 工具。
