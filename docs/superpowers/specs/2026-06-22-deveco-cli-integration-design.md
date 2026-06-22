@@ -35,7 +35,7 @@
 
 - 不维护任何 HarmonyOS 工具链封装代码。
 - 不提供除 `devecocli` 之外的 MCP server。
-- 不在脚本里后台静默安装 devecocli（由用户手动 npm 安装）。
+- 不在脚本里后台安装 DevEco Studio（图形化安装器，改注册表、需交互）——由用户手动装。
 - 不自动接受 HarmonyOS 模拟器许可协议（需用户本地交互终端执行 `devecocli emulator license accept`）。
 
 ## 2. 整体架构
@@ -82,11 +82,24 @@ ZCodeProject/
 
 | 位置 | 内容 | 由谁创建 |
 |---|---|---|
+| 全局 npm bin | `devecocli` 二进制 | 脚本调 `npm install -g @deveco/deveco-cli@latest`（缺失时自动装） |
 | `~/.zcode/skills/deveco-cli/` | 官方 `deveco-cli` skill（`SKILL.md` + 资源） | 脚本调 `devecocli init --skill --path` |
 | `~/.zcode/cli/config.json` 的 `mcpServers.deveco-cli` | `devecocli serve mcp` stdio server 配置 | 脚本合并 config 样例 |
-| 全局 PATH | `devecocli` 二进制 | 用户手动 `npm install -g` |
 
 模型侧：ZCode 加载官方 skill（提供工作流知识），通过 `mcp__deveco_cli__*` 调用语法检查等 MCP 能力，或直接建议用户/脚本运行 `devecocli <command>`。
+
+### 2.4 自动安装策略
+
+脚本检测到 `devecocli` 缺失时，**自动执行** `npm install -g @deveco/deveco-cli@latest`——这是轻量、可预期、可 `npm uninstall -g` 回滚的 CLI 包安装，不涉及注册表/图形化交互，符合"集成"的一键化预期。与不做自动化的边界：
+
+| 操作 | 是否自动 | 理由 |
+|---|---|---|
+| `npm install -g @deveco/deveco-cli` | ✅ 自动 | npm CLI 包，可回滚，无交互 |
+| DevEco Studio 安装 | ❌ 手动 | 图形化安装器，改注册表，需交互 |
+| HarmonyOS 模拟器许可协议 | ❌ 手动 | 需用户阅读并确认，AI 不能代办 |
+| 模拟器镜像下载 | ❌ 手动 | 依赖已接受的许可协议 |
+
+`--skip-install` 开关提供给想自己控制 npm 全局环境的高级用户；DryRun 模式只打印 `npm install` 命令不执行。
 
 ## 3. 组件设计
 
@@ -96,17 +109,18 @@ ZCodeProject/
 
 **调用形态**：
 ```powershell
-.\install-deveco-cli.ps1 [-DryRun] [-Force] [-ZCodeConfig <path>] [-SkillsDir <path>]
+.\install-deveco-cli.ps1 [-DryRun] [-Force] [-SkipInstall] [-ZCodeConfig <path>] [-SkillsDir <path>]
 ```
 ```bash
-./install-deveco-cli.sh [--dry-run] [--force] [--zcode-config <path>] [--skills-dir <path>]
+./install-deveco-cli.sh [--dry-run] [--force] [--skip-install] [--zcode-config <path>] [--skills-dir <path>]
 ```
 
 **参数**：
 | 参数 | 说明 | 默认 |
 |---|---|---|
-| `-DryRun`/`--dry-run` | 只打印将要执行的命令，不写盘 | 关 |
+| `-DryRun`/`--dry-run` | 只打印将要执行的命令，不写盘、不安装 | 关 |
 | `-Force`/`--force` | config.json 已有 `deveco-cli` 段时整体覆盖 | 关（默认跳过并提示） |
+| `-SkipInstall`/`--skip-install` | devecocli 缺失时**不**自动 `npm install -g`，改为报错退出 | 关（默认自动装） |
 | `-ZCodeConfig`/`--zcode-config` | ZCode config.json 路径 | `~/.zcode/cli/config.json` |
 | `-SkillsDir`/`--skills-dir` | ZCode skills 根目录 | `~/.zcode/skills` |
 
@@ -121,23 +135,27 @@ ZCodeProject/
 
 1. **`Test-DevecoCli` / `has_deveco_cli`**
    跑 `devecocli --version`，成功返回版本字符串，失败返回空。
-2. **`Resolve-DevecoPath` / `resolve_deveco_path`**
+2. **`Ensure-DevecoCli` / `ensure_deveco_cli`**
+   调用第 1 步；若缺失：
+   - `-SkipInstall` → 打印提示并退出码 1。
+   - 否则 → 执行 `npm install -g @deveco/deveco-cli@latest`（DryRun 模式只打印该命令），装完重跑 `devecocli --version` 确认；仍失败 → 退出码 1。
+3. **`Resolve-DevecoPath` / `resolve_deveco_path`**
    - Windows：注册表 `HKLM\SOFTWARE\HUAWEI\DevEco Studio` → `C:\Program Files\Huawei\DevEco Studio`
    - macOS：`/Applications/DevEco Studio.app` → `~/Applications/DevEco Studio.app`
    找不到返回空字符串（非致命，填进 `DEVECO_PATH` 占位，提示用户手填）。
-3. **`Resolve-ZCodeSkillsDir` / `resolve_zcode_skills_dir`**
+4. **`Resolve-ZCodeSkillsDir` / `resolve_zcode_skills_dir`**
    解析 `~/.zcode/skills`，缺失则创建（DryRun 模式只打印 `mkdir`）。
-4. **`Install-Skill` / `install_skill`**
+5. **`Install-Skill` / `install_skill`**
    调 `devecocli init --skill --path <SkillsDir>/deveco-cli`。
    官方 `init` 默认行为即安装 skill（`--skill` 显式化），`--path` 绕开 ZCode 不在已知 agent 列表的问题。
-5. **`Merge-McpConfig` / `merge_mcp_config`**
+6. **`Merge-McpConfig` / `merge_mcp_config`**
    读 `~/.zcode/cli/config.json`：
    - 文件不存在 → 初始化为 `{"mcpServers": {}}`（DryRun 打印将创建）。
    - 解析 JSON（解析失败 → 报错退出，**不覆盖**用户文件）。
    - 检查 `mcpServers.deveco-cli`：已存在且无 `-Force` → 打印提示并跳过本步（退出码 0，skill 已装）；有 `-Force` → 整体替换该段。
-   - 用 `config-samples/zcode-mcp-snippet.json` 内容填入，`DEVECO_PATH` 填第 2 步探测结果（可空），`PROJECT_PATH` 留空（运行时跟随当前工程）。
+   - 用 `config-samples/zcode-mcp-snippet.json` 内容填入，`DEVECO_PATH` 填第 3 步探测结果（可空），`PROJECT_PATH` 留空（运行时跟随当前工程）。
    - 写回（保留缩进风格：2 空格）。DryRun 模式打印最终 JSON diff，不写盘。
-6. **`Print-Verify` / `print_verify`**
+7. **`Print-Verify` / `print_verify`**
    输出验证清单：
    ```
    ✓ devecocli 版本：<版本>
@@ -177,15 +195,16 @@ ZCodeProject/
 
 章节：
 1. **前置要求**：Node.js ≥18（推荐 ≥22）、DevEco Studio ≥6.1.0、Windows 或 macOS。
-2. **第一步：安装 devecocli**：`npm install -g @deveco/deveco-cli@latest`；`devecocli --version` 验证。
-3. **第二步：运行引导脚本**：
+2. **第一步：运行引导脚本**（脚本会自动 `npm install -g @deveco/deveco-cli@latest`，无需手动装）：
    - Windows：`.\scripts\install-deveco-cli.ps1`
    - macOS：`./scripts/install-deveco-cli.sh`
-   - 先 `-DryRun` 预览，确认后正式跑。
-4. **第三步：核对 config.json**：打开 `~/.zcode/cli/config.json`，确认 `mcpServers.deveco-cli` 段存在，`DEVECO_PATH` 已填或手填。
-5. **第四步：验证**：重启 ZCode；在会话里要求模型跑 `devecocli device list` 或 `devecocli docs search List`。
-6. **常用命令速查**：`create`/`build`/`run`/`device list`/`emulator list`/`log`/`docs search` 表（链接官方文档）。
-7. **常见问题**：
+   - 建议先 `-DryRun`/`--dry-run` 预览将执行的命令（含 npm 安装），确认后正式跑。
+   - 若不想脚本动 npm 全局环境：加 `-SkipInstall`/`--skip-install`，自行 `npm install -g @deveco/deveco-cli@latest` 后重跑。
+3. **第二步：核对 config.json**：打开 `~/.zcode/cli/config.json`，确认 `mcpServers.deveco-cli` 段存在，`DEVECO_PATH` 已填或手填。
+4. **第三步：验证**：重启 ZCode；在会话里要求模型跑 `devecocli device list` 或 `devecocli docs search List`。
+5. **常用命令速查**：`create`/`build`/`run`/`device list`/`emulator list`/`log`/`docs search` 表（链接官方文档）。
+6. **常见问题**：
+   - npm 全局装失败 → 检查网络/npm 权限；或用 `-SkipInstall` 自行管理。
    - 找不到 devecocli → 重开终端 / 检查 npm 全局 bin 在 PATH。
    - DevEco 找不到 → INSTALL 给出官方下载页；`DEVECO_PATH` 手填示例。
    - 模拟器被许可阻塞 → 用户**本地交互终端**跑 `devecocli emulator license accept`（AI 无法代做）。
@@ -215,6 +234,9 @@ Node 原生 test runner（`node:test`），不引入 vitest（已删 `package.js
  │  运行脚本 ───────▶│                                       │                              │
  │                   │── devecocli --version ────────────────▶│                              │
  │                   │◀────────── 版本 / not found ───────────│                              │
+ │                   │   (若缺失且无 --skip-install)          │                              │
+ │                   │── npm install -g @deveco/deveco-cli ──▶│(npm 全局装入)                 │
+ │                   │── devecocli --version (复检) ─────────▶│                              │
  │                   │── 探测 DevEco Studio 路径 ────────────▶│(仅查注册表/文件系统)          │
  │                   │── devecocli init --skill --path ~/.zcode/skills ─▶│                    │
  │                   │◀──────────── skill 文件写入 ─────────────────────│                     │
@@ -236,25 +258,28 @@ Node 原生 test runner（`node:test`），不引入 vitest（已删 `package.js
 
 | 场景 | 行为 | 退出码 |
 |---|---|---|
-| `devecocli` 未装 | 打印 `npm install -g @deveco/deveco-cli@latest` 提示后退出 | 1 |
+| `devecocli` 未装（默认） | 自动 `npm install -g @deveco/deveco-cli@latest`，装完复检 `--version` | 0（成功）/ 1（npm 失败或复检仍失败） |
+| `devecocli` 未装 + `-SkipInstall` | 打印 `npm install -g @deveco/deveco-cli@latest` 提示后退出 | 1 |
+| `npm install` 失败（无网络/权限） | 透传 npm stderr，提示检查网络/npm 权限 | 1 |
 | DevEco Studio 找不到 | 警告（非致命），`DEVECO_PATH` 留空，继续装 skill | 0（含警告） |
 | `~/.zcode/skills` 不可写 | 报权限错误，不吞 | 1 |
 | `config.json` 不存在 | 初始化为 `{"mcpServers":{}}` 后合并 | 0 |
 | `config.json` 解析失败 | 报错**不覆盖**，提示用户手动备份排查 | 1 |
 | `config.json` 已有 `deveco-cli` 段（无 `-Force`） | 打印提示，跳过合并，skill 已装则成功 | 0 |
 | `devecocli init --skill` 失败 | 透传 stderr 与退出码 | 透传 |
-| DryRun 任何步骤 | 只打印，不写盘，退出码 0 | 0 |
+| DryRun 任何步骤 | 只打印（含 `npm install`），不写盘不安装，退出码 0 | 0 |
 
 所有错误消息走 stderr，验证清单走 stdout，便于测试断言与脚本管道使用。
 
 ## 6. 测试策略
 
-`test/install.test.mjs`（Node 原生 `node:test`）通过 `--dry-run` 验证脚本行为，不实际写盘：
+`test/install.test.mjs`（Node 原生 `node:test`）通过 `--dry-run` 验证脚本行为，不实际写盘、不实际安装：
 
-1. **未装 devecocli**：注入空 PATH → 退出码非 0，stdout/stderr 含 `npm install -g @deveco/deveco-cli`。
-2. **正常 dry-run**：mock `devecocli --version` 成功（用 shim 脚本）→ stdout 含 `devecocli init --skill`、`mcpServers.deveco-cli`、`devecocli device list`（验证清单）。
-3. **config 已有段（无 force）**：预置临时 config 含 `deveco-cli` → dry-run stdout 含「跳过」/「skip」字样。
-4. **config 已有段（带 force）**：dry-run stdout 含「覆盖」/「overwrite」字样。
+1. **未装 devecocli（默认自动装）**：注入空 PATH + shim 的 `devecocli --version` 失败 → dry-run stdout 含 `npm install -g @deveco/deveco-cli`（DryRun 只打印不执行）。
+2. **未装 devecocli + `--skip-install`**：注入空 PATH → 退出码非 0，stdout/stderr 含安装提示且**不含**实际触发 npm 的迹象。
+3. **正常 dry-run**：mock `devecocli --version` 成功（用 shim 脚本）→ stdout 含 `devecocli init --skill`、`mcpServers.deveco-cli`、`devecocli device list`（验证清单）。
+4. **config 已有段（无 force）**：预置临时 config 含 `deveco-cli` → dry-run stdout 含「跳过」/「skip」字样。
+5. **config 已有段（带 force）**：dry-run stdout 含「覆盖」/「overwrite」字样。
 
 跨平台：CI 在 Windows 跑 `.ps1` 测试，macOS/Linux 跑 `.sh` 测试（用 GitHub Actions matrix 或本地双跑）。无 vitest，无 TypeScript 编译步骤。
 
@@ -273,8 +298,9 @@ Node 原生 test runner（`node:test`），不引入 vitest（已删 `package.js
 ## 8. 验收标准
 
 - `harmonyos-dev/` 下不再有 `src/`、`dist/`、`.mcp.json`、`.zcode-plugin/`、`package.json`、TS 文件。
-- `scripts/install-deveco-cli.{ps1,sh}` 在装了 devecocli 的机器上：
-  - `--dry-run` 输出含 skill 安装命令、MCP 合并、验证清单。
+- `scripts/install-deveco-cli.{ps1,sh}` 在装了或未装 devecocli 的机器上：
+  - 未装 devecocli（默认）→ 自动 `npm install -g @deveco/deveco-cli@latest` 并复检；`--skip-install` → 报错退出且不触碰 npm。
+  - `--dry-run` 输出含（按需）`npm install`、`devecocli init --skill`、MCP 合并、验证清单。
   - 正式运行后 `~/.zcode/skills/deveco-cli/` 存在、`~/.zcode/cli/config.json` 含 `mcpServers.deveco-cli`。
   - 重复运行不产生重复段；`-Force` 能覆盖。
 - `test/install.test.mjs` 全绿（`node --test`）。
