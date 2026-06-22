@@ -1,0 +1,36 @@
+{
+  "rtnCode": 0,
+  "totalPages": 1,
+  "count": 2,
+  "hasNextPage": 0,
+  "layoutData": [
+    {
+      "name": "搜索结果",
+      "layoutName": "horizonhomecard",
+      "dataList": [
+        {
+          "name": "微信",
+          "hasNextPage": 0,
+          "list": [
+            {
+              "name": "微信",
+              "package": "com.tencent.mm",
+              "ID": "c10001000100010001000100010001001",
+              "icon": "https://appimg-drcn.dbankcdn.com/application/icon144/weixin.png",
+              "downCountDesc": "50 亿次安装",
+              "detailId": "app|C10001__search__weixin"
+            },
+            {
+              "name": "企业微信",
+              "package": "com.tencent.wework",
+              "ID": "c10002000200020002000200020002002",
+              "icon": "https://appimg-drcn.dbankcdn.com/application/icon144/wework.png",
+              "downCountDesc": "5 亿次安装",
+              "detailId": "app|C10002__search__wework"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

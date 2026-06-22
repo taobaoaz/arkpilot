@@ -1,0 +1,37 @@
+{
+  "name": "harmonyos-dev",
+  "version": "0.1.0",
+  "description": "为 ZCode 提供 HarmonyOS NEXT (ArkTS) 开发工作流和设备自动化能力。",
+  "author": { "name": "Z.ai" },
+  "license": "MIT",
+  "skills": "skills",
+  "commands": "commands",
+  "mcpServers": {
+    "harmonyos-dev": {
+      "command": "node",
+      "args": ["${CLAUDE_PLUGIN_ROOT}/dist/mcp/server.js"],
+      "cwd": "${ZCODE_PROJECT_DIR}",
+      "env": {
+        "HARMONYOS_PLUGIN_DATA": "${ZCODE_PLUGIN_DATA}",
+        "HARMONYOS_PLUGIN_SDK_PATH": "${user_config.sdk_path}",
+        "HARMONYOS_PLUGIN_API_LEVEL": "${user_config.api_level}",
+        "HARMONYOS_PLUGIN_HVIGOR_VERSION": "${user_config.hvigor_version}",
+        "HARMONYOS_PLUGIN_COMPATIBLE_SDK": "${user_config.compatible_sdk}",
+        "HARMONYOS_PLUGIN_DEV_MANAGE": "${user_config.dev_manage}",
+        "HARMONYOS_PLUGIN_HDC_PATH": "${user_config.hdc_path}",
+        "HARMONYOS_PLUGIN_NODE_MAJOR": "${user_config.node_major}",
+        "HARMONYOS_PLUGIN_JDK_MAJOR": "${user_config.jdk_major}"
+      }
+    }
+  },
+  "userConfig": {
+    "sdk_path": { "type": "string", "default": "", "description": "可选 HarmonyOS SDK 根目录。空时回退到 HOS_SDK_HOME/HDC_HOME/系统默认路径。" },
+    "api_level": { "type": "string", "default": "12", "description": "HarmonyOS NEXT API 等级。" },
+    "hvigor_version": { "type": "string", "default": "4.0.2", "description": "hvigor 构建系统版本。" },
+    "compatible_sdk": { "type": "string", "default": "5.0.0", "description": "compatibleSdkVersion,生成工程时使用。" },
+    "dev_manage": { "type": "string", "default": "true", "description": "是否启用 hvigor dev 管理模式。" },
+    "hdc_path": { "type": "string", "default": "", "description": "可选 hdc 可执行文件路径覆盖。" },
+    "node_major": { "type": "string", "default": "18", "description": "hvigorw 依赖的 node 主版本。" },
+    "jdk_major": { "type": "string", "default": "17", "description": "部分 hvigor 任务需要的 JDK 主版本。" }
+  }
+}

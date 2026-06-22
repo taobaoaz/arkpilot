@@ -1,0 +1,6 @@
+{
+  "apiType": "stageMode",
+  "buildOption": {},
+  "buildMode": "debug",
+  "targets": [{ "name": "default", "runtimeOS": "HarmonyOS" }]
+}

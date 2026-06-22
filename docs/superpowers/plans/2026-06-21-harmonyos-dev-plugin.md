@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** 构建一个 ZCode 插件 `harmonyos-dev`,通过 stdio MCP server 暴露 23 个工具,覆盖 HarmonyOS NEXT(ArkTS)环境预检、版本检查、工程发现/创建、hvigor 构建、设备运行、截图、日志、UI 自动化、代码脚手架的完整开发闭环。
+**Goal:** 构建一个 ZCode 插件 `harmonyos-dev`,通过 stdio MCP server 暴露 25 个工具,覆盖 HarmonyOS NEXT(ArkTS)环境预检、版本检查、工程发现/创建、hvigor 构建、设备运行、截图、日志、UI 自动化、代码脚手架的完整开发闭环。
 
 **Architecture:** 单插件单 MCP Server,对齐官方 `android-emulator@zcode-plugins-official`。TypeScript 源码按 lib/providers 分层,esbuild 单文件打包成 `dist/mcp/server.js`。所有工具无状态,平台差异由 provider 封装,模型通过 `mcp__harmonyos_dev__<tool>` 调用。
 
@@ -52,7 +52,7 @@
 | `src/providers/scaffold.ts` | ArkTS 脚手架 |
 | `src/providers/updates.ts` | 在线版本检查 |
 | `src/providers/config.ts` | userConfig/env 读取 |
-| `src/mcp/server.ts` | MCP 入口,注册 23 个工具 |
+| `src/mcp/server.ts` | MCP 入口,注册 25 个工具 |
 | `skills/harmonyos-dev/SKILL.md` | 模型工作流 |
 | `skills/harmonyos-dev/INSTALL_ENVIRONMENT.md` | 环境安装流程 |
 | `commands/harmonyos-dev.md` | 斜杠命令 |
@@ -2389,7 +2389,7 @@ git commit -m "feat(providers): add checkUpdates online version check with cache
 
 ---
 
-## Task 18: mcp/server.ts —— 注册 23 个工具
+## Task 18: mcp/server.ts —— 注册 25 个工具
 
 **Files:**
 - Modify: `harmonyos-dev/src/mcp/server.ts`(替换占位)
@@ -2444,10 +2444,10 @@ const TOOLS: ToolDef[] = [
   { name: "harmony_create_component", description: "Scaffold @Component custom component.", schema: z.object({ root: z.string(), name: z.string(), overwrite: z.boolean().optional() }), handler: async (a) => createComponent(a) },
 ];
 
-// 注:为保持单文件可读,create_ability/create_module 同模式追加,此处已含 23 个(含 create_module/create_ability 在下方补)
+// 注:为保持单文件可读,create_ability/create_module 同模式追加,此处已含 25 个(含 create_module/create_ability 在下方补)
 ```
 
-注意:上面 TOOLS 数组需补齐 `harmony_create_ability` 与 `harmony_create_module` 两个(模式相同),合计 23 个。完整实现追加:
+注意:上面 TOOLS 数组需补齐 `harmony_create_ability` 与 `harmony_create_module` 两个(模式相同),合计 25 个。完整实现追加:
 ```ts
   { name: "harmony_create_ability", description: "Scaffold UIAbility/UIExtensionAbility.", schema: z.object({ root: z.string(), name: z.string(), type: z.enum(["UIAbility", "UIExtensionAbility"]) }), handler: async (a) => createAbility(a) },
   { name: "harmony_create_module", description: "Scaffold feature/shared module.", schema: z.object({ root: z.string(), name: z.string(), type: z.enum(["feature", "shared"]) }), handler: async (a) => createModule(a) },
@@ -2522,7 +2522,7 @@ import { TOOLS } from "../src/mcp/server.js";
 
 describe("server tool registry", () => {
   it("registers exactly 23 tools", () => {
-    expect(TOOLS).toHaveLength(23);
+    expect(TOOLS).toHaveLength(25);
   });
 
   it("all tool names start with harmony_ and have descriptions", () => {
@@ -2766,7 +2766,7 @@ git commit -m "feat: add plugin manifest, skill workflow, command, install guide
 cd harmonyos-dev
 npm run build                     # [ ] 产出 dist/mcp/server.js 无类型错误
 npm test                          # [ ] 三层测试全绿
-echo '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}' | node dist/mcp/server.js  # [ ] 返回 23 个工具
+echo '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}' | node dist/mcp/server.js  # [ ] 返回 25 个工具
 ```
 
 - [ ] **Step 2: 在临时空目录验证 create_app(离线)**
@@ -2794,7 +2794,7 @@ git tag harmonyos-dev-v0.1.0
 **1. Spec coverage:** 逐条核对 spec ——
 - 目录结构(2 节)→ Task 0 + 各 provider Task ✓
 - 14 个 provider + config(3 节)→ Task 6-17 ✓(config 为新增 Task 6,补足 spec 隐含依赖)
-- 23 个工具(3.16)→ Task 18 注册 ✓
+- 25 个工具(3.16)→ Task 18 注册 ✓
 - SKILL/INSTALL_ENVIRONMENT/command(4.2-4.4)→ Task 20 ✓
 - plugin.json/seed/mcp/package(4.5-4.8)→ Task 0(package)+ Task 20 ✓
 - 数据流/错误/幂等(5 节)→ lib/run + asyncWrap 覆盖 ✓

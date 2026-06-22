@@ -1,0 +1,34 @@
+name: AppGallery Crawl
+
+on:
+  schedule:
+    # 每周日 03:00 UTC
+    - cron: "0 3 * * 0"
+  workflow_dispatch:
+    inputs:
+      categories:
+        description: "逗号分隔的分类 id(留空=全部)"
+        required: false
+        default: ""
+
+jobs:
+  crawl:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - run: npm ci
+        working-directory: harmonyos-dev
+      - name: Crawl
+        working-directory: harmonyos-dev
+        run: npx tsx scripts/appstore-crawl.ts ${{ github.event.inputs.categories && format('--categories {0}', github.event.inputs.categories) || '' }}
+        env:
+          NETWORK_TEST: "1"
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: appstore-apps
+          path: harmonyos-dev/data/appstore/apps.json
+          if-no-files-found: warn

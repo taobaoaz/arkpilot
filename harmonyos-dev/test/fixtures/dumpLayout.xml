@@ -1,0 +1,5 @@
+<root>
+  <node type="Text" text="Login" bounds="[100,200][300,260]" enabled="true" visible="true"/>
+  <node type="Button" text="Submit" id="submit_btn" bounds="[100,400][300,460]" enabled="true" visible="true"/>
+  <node type="TextInput" text="" id="user" bounds="[100,300][300,360]" enabled="true" visible="true"/>
+</root>

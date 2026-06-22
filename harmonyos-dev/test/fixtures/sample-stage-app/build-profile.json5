@@ -1,0 +1,11 @@
+{
+  "app": {
+    "signingConfigs": [],
+    "products": [{ "name": "default", "signingConfig": "default" }],
+    "buildMode": "debug",
+    "bundleName": "com.example.sample",
+    "versionCode": 1000000,
+    "versionName": "1.0.0"
+  },
+  "modules": [{ "name": "entry", "srcPath": "./entry", "targets": [{ "name": "default", "applyToProducts": ["default"] }] }]
+}
