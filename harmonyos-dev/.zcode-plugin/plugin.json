@@ -1,6 +1,6 @@
 {
   "name": "harmonyos-dev",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "为 ZCode 提供 HarmonyOS NEXT (ArkTS) 开发工作流和设备自动化能力。",
   "author": { "name": "Z.ai" },
   "license": "MIT",
