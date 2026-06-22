@@ -153,3 +153,65 @@ export function _resetAppstoreStateForTest(): void {
   cache.clear();
   lastReqAt = 0;
 }
+
+export async function listCategories(): Promise<CategoriesResult> {
+  const fetchedAt = new Date().toISOString();
+  return withCache("categories", async () => {
+    await rateLimit();
+    const res = await retryWithBackoff(() => httpJson(`${BASE}/app/categoryList`));
+    if (!res.ok || !res.json) {
+      return { ok: true, categories: [], source: "partial", note: `fetch failed: ${res.error ?? res.status}`, fetchedAt };
+    }
+    return { ok: true, categories: parseCategories(res.json), source: "online", fetchedAt };
+  });
+}
+
+export async function listByCategory(input: ListByCategoryInput): Promise<ListResult> {
+  const page = input.page ?? 1;
+  const pageSize = input.pageSize ?? 20;
+  const cacheKey = `list:${input.category}:${page}:${pageSize}`;
+  const fetchedAt = new Date().toISOString();
+  return withCache(cacheKey, async () => {
+    await rateLimit();
+    const url = `${BASE}/app/listByCategory?categoryId=${encodeURIComponent(input.category)}&page=${page}&pageSize=${pageSize}`;
+    const res = await retryWithBackoff(() => httpJson(url));
+    if (!res.ok || !res.json) {
+      return { ok: true, apps: [], page, pageSize, source: "partial", note: `fetch failed: ${res.error ?? res.status}`, fetchedAt };
+    }
+    const apps = parseList(res.json);
+    const total = (res.json as any)?.total ?? 0;
+    const totalPages = total > 0 ? Math.ceil(total / pageSize) : undefined;
+    return { ok: true, apps, page, pageSize, totalPages, source: "online", fetchedAt };
+  });
+}
+
+export async function getDetail(input: DetailInput): Promise<DetailResult> {
+  const fetchedAt = new Date().toISOString();
+  const target = input.url ?? (input.appId ? `${BASE}/app/${input.appId}` : "");
+  if (!target) {
+    return { ok: false, app: null, source: "partial", note: "need appId or url", fetchedAt };
+  }
+  const cacheKey = `detail:${target}`;
+  return withCache(cacheKey, async () => {
+    await rateLimit();
+    const res = await retryWithBackoff(() => httpJson(`${target}/detail`));
+    if (!res.ok || !res.json) {
+      return { ok: true, app: null, source: "partial", note: `fetch failed: ${res.error ?? res.status}`, fetchedAt };
+    }
+    return { ok: true, app: parseDetail(res.json), source: "online", fetchedAt };
+  });
+}
+
+export async function checkSource(): Promise<CheckResult> {
+  const res = await httpJson(`${BASE}/app/categoryList`, { timeout: 8000 });
+  let browser_fallback = false;
+  try {
+    await import("playwright");
+    browser_fallback = true;
+  } catch {
+    browser_fallback = false;
+  }
+  const http = res.ok;
+  const note = browser_fallback ? undefined : "install playwright for browser fallback";
+  return { ok: true, http, browser_fallback, note };
+}
