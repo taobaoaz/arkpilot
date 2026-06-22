@@ -1,0 +1,39 @@
+# Dependabot version updates.
+# https://docs.github.com/code-security/dependabot/dependabot-version-updates/configuration-options-for-the-dependabot.yml-file
+version: 2
+updates:
+  - package-ecosystem: "npm"
+    # The plugin lives in a subfolder; this is the manifest Dependabot will scan.
+    directory: "/harmonyos-dev"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "03:00"
+      timezone: "UTC"
+    # Group minor + patch updates into a single PR to keep the noise low.
+    groups:
+      minor-and-patch:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
+    # PR limits and labels.
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+      - "automated"
+    # Allow auto-merge once CI is in place; for now we just open the PR.
+    # auto-merge: true
+    commit-message:
+      prefix: "deps"
+      prefix-development: "deps(dev)"
+      include: "scope"
+    # Pull requests target the default branch by default.
+    target-branch: "main"
+    # Reuse the existing CHANGELOG format if you want; for now leave it to Dependabot.
+    changelog-path: ".dependabot/changelog"
+    # Don't open PRs for major version bumps; those need manual review.
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
