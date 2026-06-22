@@ -40,7 +40,7 @@ function buildApiUrl(method: string, extra: Record<string, string> = {}): string
  */
 async function fetchViaBrowser(
   pageUrl: string,
-  opts: { searchKeyword?: string; timeoutMs?: number } = {},
+  opts: { searchKeyword?: string; timeoutMs?: number; collectAll?: boolean } = {},
 ): Promise<any | null> {
   let chromium: any;
   try {
@@ -54,9 +54,9 @@ async function fetchViaBrowser(
     browser = await chromium.launch({ headless: true });
     const page = await browser.newPage();
     let captured: any = null;
+    const collected: any[] = []; // 仅 collectAll 时使用
     page.on("response", async (r: any) => {
       const u = r.url();
-      if (captured) return;
       try {
         const t = await r.text();
         if (!t.trim().startsWith("{")) return;
@@ -68,17 +68,21 @@ async function fetchViaBrowser(
               captured = { kind: "exact-app", payload: j.app };
             }
           }
-          return; // 搜索时忽略 getTabDetail(可能是相关推荐)
+          return;
         }
-        // 非搜索:取首个 getTabDetail JSON(分类列表/详情)
-        if (u.includes("getTabDetail")) {
+        // 收集模式(详情场景):记录所有 getTabDetail 响应
+        if (opts.collectAll && u.includes("getTabDetail")) {
+          collected.push({ url: u, json: JSON.parse(t) });
+          return;
+        }
+        // 常规模式:取首个 getTabDetail
+        if (u.includes("getTabDetail") && !captured) {
           captured = { kind: "tab-detail", payload: JSON.parse(t) };
         }
       } catch {
         /* ignore */
       }
     });
-    // 若提供了 searchKeyword,优先在首页触发联想(首页搜索框空,无预填)。
     const targetUrl = opts.searchKeyword ? WEB_BASE : pageUrl;
     await page.goto(targetUrl, { waitUntil: "domcontentloaded", timeout: timeoutMs }).catch(() => {});
     if (opts.searchKeyword) {
@@ -92,10 +96,13 @@ async function fetchViaBrowser(
           await page.waitForTimeout(3500);
         }
       } catch {
-        /* 输入触发失败时忽略,继续返回已捕获的 getTabDetail。 */
+        /* 输入触发失败时忽略。 */
       }
     }
     await page.waitForTimeout(1500);
+    if (opts.collectAll) {
+      return { kind: "tab-detail-all", payload: collected };
+    }
     return captured;
   } finally {
     if (browser) await browser.close().catch(() => {});
@@ -200,7 +207,7 @@ function mapItem(info: any): AppInfo | null {
   };
 }
 
-/** 真实结构:layoutData[].dataList[].list[] 才是 app 数组。 */
+/** 真实结构:layoutData[].dataList[].list[] 才是 app 数组。详情页/搜索相关: dataList[0] 自身可能是 app 对象(有 appid/name/package)。 */
 function extractApps(raw: any): AppInfo[] {
   const layoutData = raw?.layoutData ?? raw?.data?.layoutData ?? [];
   if (!Array.isArray(layoutData)) return [];
@@ -209,6 +216,13 @@ function extractApps(raw: any): AppInfo[] {
     const dataList = layout?.dataList ?? [];
     if (!Array.isArray(dataList)) continue;
     for (const dl of dataList) {
+      // 情况 1:dl 本身就是 app 对象(详情页/相关推荐卡片)
+      if (dl && typeof dl === "object" && (dl.appid || dl.ID || dl.package) && dl.name) {
+        const mapped = mapItem(dl);
+        if (mapped) out.push(mapped);
+        continue;
+      }
+      // 情况 2:dl.list 或 dl.appList 是 app 数组(搜索结果列表)
       const apps = dl?.list ?? dl?.appList ?? (Array.isArray(dl) ? dl : []);
       if (!Array.isArray(apps)) continue;
       for (const a of apps) {
@@ -308,16 +322,55 @@ export function _resetAppstoreStateForTest(): void {
   lastReqAt = 0;
 }
 
+/**
+ * 常见 AppGallery 分类(基于移动端 App 实际分类,2026-06 抓包确认)。
+ * web 端无分类导航,这里返回预设集合供 listByCategory 使用,id 是分类名(详情接口的 uri 兼容形式)。
+ * 如需更多分类,可在 mobile App 里观察后补充。
+ */
+const KNOWN_CATEGORIES: Category[] = [
+  { id: "app|game", name: "游戏" },
+  { id: "app|app", name: "应用" },
+  { id: "app|tool", name: "工具" },
+  { id: "app|social", name: "社交" },
+  { id: "app|education", name: "教育" },
+  { id: "app|music", name: "音乐" },
+  { id: "app|video", name: "视频" },
+  { id: "app|shopping", name: "购物" },
+  { id: "app|photography", name: "摄影" },
+  { id: "app|finance", name: "金融理财" },
+  { id: "app|travel", name: "出行" },
+  { id: "app|health", name: "运动健康" },
+  { id: "app|reading", name: "阅读" },
+  { id: "app|news", name: "新闻" },
+  { id: "app|weather", name: "天气" },
+];
+
 export async function listCategories(): Promise<CategoriesResult> {
   const fetchedAt = new Date().toISOString();
   return withCache("categories", async () => {
     await rateLimit();
+    // 尝试从 web 模板拉真实分类(通常返回 searchbox 类 tab,不实用)
     const url = buildApiUrl("internal.getTemplate");
     const res = await retryWithBackoff(() => httpJson(url));
-    if (!res.ok || !res.json) {
-      return { ok: true, categories: [], source: "partial", note: `fetch failed: ${res.error ?? res.status}`, fetchedAt };
+    let webCats: Category[] = [];
+    if (res.ok && res.json) {
+      const all = parseCategories(res.json);
+      // 只保留非 searchbox 类的(真实分类应 titleType=tab)
+      webCats = all.filter((c) => !c.id.startsWith("tab_") || c.name !== "搜索");
     }
-    return { ok: true, categories: parseCategories(res.json), source: "online", fetchedAt };
+    // 合并:已知分类在前,web 真实分类去重后追加
+    const seen = new Set(KNOWN_CATEGORIES.map((c) => c.id));
+    const merged = [...KNOWN_CATEGORIES];
+    for (const c of webCats) if (!seen.has(c.id)) { merged.push(c); seen.add(c.id); }
+    return {
+      ok: true,
+      categories: merged,
+      source: "online",
+      note: KNOWN_CATEGORIES.length > 0
+        ? "web 端无分类导航,基于移动端常见分类预设 + web 模板补充"
+        : undefined,
+      fetchedAt,
+    };
   });
 }
 
@@ -374,14 +427,23 @@ export async function getDetail(input: DetailInput): Promise<DetailResult> {
     let note: string | undefined;
     if (!res.ok || !res.json || isBlockedBySignature(res)) {
       const pageUrl = `${WEB_BASE}/app/${appId}`;
-      const browserResult = await _testHooks.fetchViaBrowser(pageUrl);
-      if (browserResult?.kind === "tab-detail") {
-        json = browserResult.payload;
+      const browserResult = await _testHooks.fetchViaBrowser(pageUrl, { collectAll: true });
+      if (browserResult?.kind === "tab-detail-all" && Array.isArray(browserResult.payload)) {
+        // 详情页会发出多个 getTabDetail(模板/相关推荐/实际详情),
+        // 找到含目标 appId 的那一条,通常 layoutData[*].dataList[*].list[*].appid === appId
+        const wanted = browserResult.payload.find((entry: any) => {
+          const j = entry.json;
+          if (!j) return false;
+          const apps = extractApps(j);
+          return apps.some((a) => a.appId === appId);
+        });
+        json = wanted?.json ?? browserResult.payload[0]?.json;
         note = "via browser fallback";
       } else {
         return { ok: true, app: null, source: "partial", note: `fetch failed: ${res.error ?? res.status}; browser fallback unavailable`, fetchedAt };
       }
     }
+    // 即使匹配到了含 appId 的响应,parseDetail 取第一个 app 即可(此时第一个就是目标)
     return { ok: true, app: parseDetail(json), source, note, fetchedAt };
   });
 }

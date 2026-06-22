@@ -148,19 +148,23 @@ describe("appstore.searchApp", () => {
 });
 
 describe("appstore.listCategories", () => {
-  it("returns categories from httpJson online", async () => {
+  it("returns known categories online (web 端无分类导航,返回预设集合)", async () => {
     vi.mocked(httpJson).mockResolvedValue({ ok: true, status: 200, json: fx("categories.json") });
     const r = await listCategories();
     expect(r.ok).toBe(true);
-    expect(r.categories).toHaveLength(4);
     expect(r.source).toBe("online");
+    // 至少包含已知的 15 个常用分类
+    expect(r.categories.length).toBeGreaterThanOrEqual(15);
+    expect(r.categories.find((c) => c.id === "app|game")?.name).toBe("游戏");
+    expect(r.categories.find((c) => c.id === "app|tool")?.name).toBe("工具");
   });
 
-  it("returns partial empty on failure", async () => {
+  it("still returns known categories when httpJson fails (offline-tolerant)", async () => {
     vi.mocked(httpJson).mockResolvedValue({ ok: false, status: 0, error: "ENETUNREACH" });
     const r = await listCategories();
-    expect(r.categories).toEqual([]);
-    expect(r.source).toBe("partial");
+    expect(r.ok).toBe(true);
+    expect(r.source).toBe("online");
+    expect(r.categories.length).toBeGreaterThanOrEqual(15);
   });
 });
 
