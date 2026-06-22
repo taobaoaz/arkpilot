@@ -1,0 +1,17 @@
+{
+  "layoutList": [
+    {
+      "appInfo": {
+        "appId": "C20001",
+        "name": "王者荣耀",
+        "packageName": "com.tencent.tmgp.pubgmhd",
+        "developer": "Tencent",
+        "icon": "https://appimg.dbankcdn.com/pvp.png"
+      },
+      "productUrl": "/app/C20001"
+    }
+  ],
+  "total": 1,
+  "page": 1,
+  "pageSize": 20
+}

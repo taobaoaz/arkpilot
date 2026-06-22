@@ -1,0 +1,11 @@
+{
+  "appInfo": {
+    "appId": "C10001",
+    "name": "微信",
+    "packageName": "com.tencent.mm",
+    "developer": "Tencent",
+    "categoryName": "社交",
+    "icon": "https://appimg.dbankcdn.com/weixin.png"
+  },
+  "productUrl": "/app/C10001"
+}

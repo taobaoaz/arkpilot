@@ -1,0 +1,8 @@
+{
+  "categoryList": [
+    { "id": "game", "name": "游戏" },
+    { "id": "social", "name": "社交" },
+    { "id": "tools", "name": "工具" },
+    { "id": "education", "name": "教育" }
+  ]
+}

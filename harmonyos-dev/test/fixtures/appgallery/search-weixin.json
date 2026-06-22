@@ -1,0 +1,25 @@
+{
+  "layoutList": [
+    {
+      "appInfo": {
+        "appId": "C10001",
+        "name": "微信",
+        "packageName": "com.tencent.mm",
+        "developer": "Tencent",
+        "icon": "https://appimg.dbankcdn.com/weixin.png"
+      },
+      "productUrl": "/app/C10001"
+    },
+    {
+      "appInfo": {
+        "appId": "C10002",
+        "name": "企业微信",
+        "packageName": "com.tencent.wework",
+        "developer": "Tencent",
+        "icon": "https://appimg.dbankcdn.com/wework.png"
+      },
+      "productUrl": "/app/C10002"
+    }
+  ],
+  "total": 2
+}
