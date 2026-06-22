@@ -10,6 +10,10 @@ on:
         description: "逗号分隔的分类 id(留空=全部)"
         required: false
         default: ""
+      publish:
+        description: "是否发布到 public release asset (apps.json)"
+        type: boolean
+        default: true
 
 jobs:
   crawl:
@@ -32,3 +36,101 @@ jobs:
           name: appstore-apps
           path: harmonyos-dev/data/appstore/apps.json
           if-no-files-found: warn
+
+  publish:
+    needs: crawl
+    if: github.event.inputs.publish != false && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write  # required to create/update releases
+    steps:
+      - name: Download crawled apps.json
+        uses: actions/download-artifact@v4
+        with:
+          name: appstore-apps
+          path: apps-json-staging
+
+      - name: Validate artifact is non-empty
+        run: |
+          if [ ! -s apps-json-staging/apps.json ]; then
+            echo "::error::apps.json is empty or missing; refusing to publish"
+            exit 1
+          fi
+          APP_COUNT=$(jq -r '.apps | length' apps-json-staging/apps.json)
+          if [ "$APP_COUNT" -lt 1 ]; then
+            echo "::error::apps.json contains 0 apps; refusing to publish"
+            exit 1
+          fi
+          echo "apps_count=$APP_COUNT"
+
+      - name: Compute metadata
+        id: meta
+        run: |
+          echo "fetched_at=$(jq -r '.fetchedAt' apps-json-staging/apps.json)" >> $GITHUB_OUTPUT
+          echo "apps_count=$(jq -r '.apps | length' apps-json-staging/apps.json)" >> $GITHUB_OUTPUT
+          echo "size_bytes=$(wc -c < apps-json-staging/apps.json)" >> $GITHUB_OUTPUT
+
+      - name: Ensure release "appstore-latest" exists
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if ! gh release view appstore-latest >/dev/null 2>&1; then
+            echo "Creating release appstore-latest..."
+            gh release create appstore-latest \
+              --repo "${{ github.repository }}" \
+              --title "AppGallery data — latest snapshot" \
+              --notes "$(cat <<'EOF'
+## AppGallery weekly snapshot (always-latest)
+
+This release holds the most recent output of the [AppGallery Crawl](../../actions/workflows/appstore-crawl.yml) workflow. The asset `apps.json` is overwritten on every successful run.
+
+**Schema**: `{ "apps": AppInfo[], "fetchedAt": ISO8601 }`
+
+To download a fixed version, see the [Releases list](../../releases?q=appstore-). To consume in code:
+
+```bash
+curl -L -o apps.json \
+  https://github.com/${{ github.repository }}/releases/download/appstore-latest/apps.json
+```
+EOF
+)" \
+              --target main
+          else
+            echo "Release appstore-latest already exists; will update asset."
+          fi
+
+      - name: Publish apps.json asset
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release upload appstore-latest \
+            apps-json-staging/apps.json \
+            --repo "${{ github.repository }}" \
+            --clobber
+
+      - name: Update release notes with run metadata
+        if: success()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          NOTES="## AppGallery weekly snapshot (always-latest)
+
+This release holds the most recent output of the [AppGallery Crawl workflow](../../actions/workflows/appstore-crawl.yml). The asset \`apps.json\` is overwritten on every successful run.
+
+**Current snapshot**:
+- fetched_at: ${{ steps.meta.outputs.fetched_at }}
+- apps_count: ${{ steps.meta.outputs.apps_count }}
+- size_bytes: ${{ steps.meta.outputs.size_bytes }}
+- run: [#${{ github.run_number }}](../../actions/runs/${{ github.run_id }})
+
+**Schema**: \`{ \"apps\": AppInfo[], \"fetchedAt\": ISO8601 }\`
+
+To download:
+
+\`\`\`bash
+curl -L -o apps.json \\
+  https://github.com/${{ github.repository }}/releases/download/appstore-latest/apps.json
+\`\`\`"
+          gh release edit appstore-latest \
+            --repo "${{ github.repository }}" \
+            --notes "$NOTES"
