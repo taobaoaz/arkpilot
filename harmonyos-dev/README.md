@@ -47,8 +47,9 @@ MCP tools, so the model sees `mcp__harmonyos_dev__<tool>`, e.g.
   auto-upgrades.
 - Expose UI actions through `hdc shell uitest` (status/describe/resolve/tap/type/back).
 - Scaffold ArkTS pages, components, abilities, and modules.
+- Query Huawei AppGallery app metadata via `appstore_search` / `appstore_categories` / `appstore_list_by_category` / `appstore_detail`.
 
-## MCP Tools (25)
+## MCP Tools (30)
 
 - `harmony_preflight`
 - `harmony_check_updates`
@@ -75,6 +76,11 @@ MCP tools, so the model sees `mcp__harmonyos_dev__<tool>`, e.g.
 - `harmony_create_component`
 - `harmony_create_ability`
 - `harmony_create_module`
+- `appstore_search`
+- `appstore_categories`
+- `appstore_list_by_category`
+- `appstore_detail`
+- `appstore_check`
 
 ## Requirements
 
@@ -98,6 +104,44 @@ npm run typecheck
 npm test           # vitest run test
 ```
 
+## AppGallery Tools (appstore_*)
+
+These 5 tools fetch app metadata from Huawei AppGallery (`appgallery.huawei.com`): name,
+package name, developer, category, icon URL, detail page URL.
+
+**Core use case — `appstore_search`:** external MCP clients pass an app name, get back a JSON
+list of matching apps. Example:
+
+```
+appstore_search({ query: "微信", limit: 5 })
+-> { ok: true, apps: [{ name, pkg, dev, icon, url, ... }], source: "online", fetchedAt }
+```
+
+### Coverage & honesty
+
+AppGallery has **no public "list all apps" API** and applies anti-scraping (browser
+fingerprinting, IP rate limits). These tools cover reachable apps (rankings + categories +
+search) but **do not guarantee 100% coverage**. Every result carries a `source` field:
+`online` (fresh), `cache` (within 5min TTL), or `partial` (degraded, with a `note`).
+
+### Optional browser fallback
+
+Playwright is an `optionalDependency`. When installed, dynamic/anti-scraped responses fall
+back to a headless browser. Without it, tools work in HTTP-only mode. Run `appstore_check` to
+probe availability; install with `npm install playwright`.
+
+### Full crawl (not via MCP)
+
+Long-running full crawl runs as a script (MCP tools are unsuitable for long tasks):
+
+```bash
+npm run crawl                           # all categories
+npx tsx scripts/appstore-crawl.ts --categories game,social   # subset
+```
+
+Output: `data/appstore/apps.json` (gitignored). Resume support via `data/appstore/.progress.json`.
+A weekly GitHub Actions workflow (`.github/workflows/appstore-crawl.yml`) runs this automatically.
+
 ## Extension Points
 
 - `src/providers/project.ts` owns project discovery and creation.
@@ -105,3 +149,4 @@ npm test           # vitest run test
 - `src/providers/device.ts` owns hdc device discovery.
 - `src/providers/ui.ts` owns UI automation operations.
 - `src/providers/updates.ts` owns online version checking.
+- `src/providers/appstore.ts` owns AppGallery metadata fetching (search/categories/list/detail).
