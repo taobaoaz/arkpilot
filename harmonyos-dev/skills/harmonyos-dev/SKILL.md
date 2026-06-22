@@ -1,6 +1,6 @@
 ---
 name: harmonyos-dev
-description: 通过 harmonyos-dev MCP 工具构建、运行、检查并自动化 HarmonyOS NEXT (ArkTS) 应用。
+description: 通过 harmonyos-dev MCP 工具构建、运行、检查并自动化 HarmonyOS NEXT (ArkTS) 应用,或查询华为应用市场应用信息。
 ---
 
 # HarmonyOS Dev
@@ -40,6 +40,21 @@ MCP server 配置为 `harmonyos-dev`,工具暴露为 `mcp__harmonyos_dev__<tool>
 - node 版本低 → INSTALL_ENVIRONMENT。
 - SDK 路径错 → 配置 `HOS_SDK_HOME`。
 - ohpm install 失败 → 检查 oh-package.json5 / 网络 / 仓库源。
+
+## AppGallery 工作流 (appstore_*)
+
+当用户想查 AppGallery 应用信息(名称、包名、开发者、图标、分类)时使用 appstore 工具。
+
+1. **定向查某个应用** → `appstore_search({ query: "微信" })`。`exact:true` 只返回精确名匹配。
+2. **列分类** → `appstore_categories()`,拿 `id` 用于下一步。
+3. **浏览分类下的应用** → `appstore_list_by_category({ category: "game", page: 1 })`。
+4. **补全单个应用字段** → `appstore_detail({ appId })` 或 `{ url }`。
+5. **诊断数据源** → `appstore_check()`,报告 http 是否可达、playwright 浏览器降级是否可用。
+
+**注意:**
+- 覆盖率不保证 100%。每个返回有 `source` 字段(`online`/`cache`/`partial`),如实反映数据质量。
+- `partial` 时带 `note`,告知用户降级原因(网络失败/反爬/浏览器降级未启用)。
+- 全量抓取不走 MCP(长任务),用 `npm run crawl` 脚本,见 README。
 
 ## Extension Point
 
