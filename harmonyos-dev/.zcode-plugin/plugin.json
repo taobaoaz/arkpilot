@@ -1,13 +1,13 @@
 {
-  "name": "harmonyos-dev",
-  "version": "0.2.0",
+  "name": "arkpilot",
+  "version": "0.3.0",
   "description": "为 ZCode 提供 HarmonyOS NEXT (ArkTS) 开发工作流和设备自动化能力。",
   "author": { "name": "Z.ai" },
   "license": "MIT",
   "skills": "skills",
   "commands": "commands",
   "mcpServers": {
-    "harmonyos-dev": {
+    "arkpilot": {
       "command": "node",
       "args": ["${CLAUDE_PLUGIN_ROOT}/dist/mcp/server.js"],
       "cwd": "${ZCODE_PROJECT_DIR}",

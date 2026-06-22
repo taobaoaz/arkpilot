@@ -1,6 +1,6 @@
 {
   "mcpServers": {
-    "harmonyos-dev": {
+    "arkpilot": {
       "command": "node",
       "args": ["${CLAUDE_PLUGIN_ROOT}/dist/mcp/server.js"],
       "cwd": "${CLAUDE_PROJECT_DIR}",

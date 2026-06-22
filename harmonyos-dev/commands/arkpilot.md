@@ -1,10 +1,10 @@
 ---
 description: 启动 HarmonyOS NEXT 开发循环。
 argument-hint: "[目标或问题描述]"
-skills: harmonyos-dev
+skills: arkpilot
 ---
 
-Use the `harmonyos-dev` skill for this request:
+Use the `arkpilot` skill for this request:
 
 $ARGUMENTS
 

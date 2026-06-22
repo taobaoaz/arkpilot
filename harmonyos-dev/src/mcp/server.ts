@@ -13,7 +13,6 @@ import { screenshot } from "../providers/screenshot.js";
 import { uiStatus, uiTap, uiTypeText, uiBack, parseLayout, resolveCenter } from "../providers/ui.js";
 import { createPage, createComponent, createAbility, createModule } from "../providers/scaffold.js";
 import { checkUpdates } from "../providers/updates.js";
-import { searchApp, listCategories, listByCategory, getDetail, checkSource } from "../providers/appstore.js";
 
 const serial = z.object({ serial: z.string() });
 const root = z.object({ root: z.string().optional() });
@@ -204,47 +203,6 @@ export const TOOLS: ToolDef[] = [
     schema: z.object({ root: z.string(), name: z.string(), type: z.enum(["feature", "shared"]) }),
     handler: (a) => createModule(a),
   },
-  {
-    name: "appstore_search",
-    description: "Search AppGallery apps by name. Returns matching apps with icon URL + detail URL. Core tool for 'input name -> return name'.",
-    schema: z.object({
-      query: z.string(),
-      limit: z.number().optional(),
-      exact: z.boolean().optional(),
-    }),
-    handler: async (a) => searchApp(a),
-  },
-  {
-    name: "appstore_categories",
-    description: "List all AppGallery categories. Read-only.",
-    schema: z.object({}),
-    handler: async () => listCategories(),
-  },
-  {
-    name: "appstore_list_by_category",
-    description: "Page through apps in a category (page default 1, pageSize default 20).",
-    schema: z.object({
-      category: z.string(),
-      page: z.number().optional(),
-      pageSize: z.number().optional(),
-    }),
-    handler: async (a) => listByCategory(a),
-  },
-  {
-    name: "appstore_detail",
-    description: "Fetch single app detail by appId or url (one required). Fills pkg/dev/category fields.",
-    schema: z.object({
-      appId: z.string().optional(),
-      url: z.string().optional(),
-    }),
-    handler: async (a) => getDetail(a),
-  },
-  {
-    name: "appstore_check",
-    description: "Probe AppGallery data source availability (http + optional playwright fallback). Read-only diagnostic.",
-    schema: z.object({}),
-    handler: async () => checkSource(),
-  },
 ];
 
 async function asyncWrap(handler: (a: any) => Promise<any> | any, args: unknown) {
@@ -261,7 +219,7 @@ function zodToJsonSchema(_schema: z.ZodType<any>): any {
 }
 
 const server = new Server(
-  { name: "harmonyos-dev", version: "0.2.0" },
+  { name: "arkpilot", version: "0.3.0" },
   { capabilities: { tools: {} } },
 );
 
