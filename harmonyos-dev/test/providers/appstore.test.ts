@@ -2,10 +2,25 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
-import { parseSearch, parseCategories, parseList, parseDetail } from "../../src/providers/appstore.js";
+import {
+  parseSearch,
+  parseCategories,
+  parseList,
+  parseDetail,
+  searchApp,
+  _resetAppstoreStateForTest,
+} from "../../src/providers/appstore.js";
+
+vi.mock("../../src/lib/http.js", () => ({ httpJson: vi.fn(), httpText: vi.fn() }));
+import { httpJson } from "../../src/lib/http.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const fx = (name: string) => JSON.parse(readFileSync(join(__dirname, "..", "fixtures", "appgallery", name), "utf-8"));
+
+beforeEach(() => {
+  vi.mocked(httpJson).mockReset();
+  _resetAppstoreStateForTest();
+});
 
 describe("appstore parsers", () => {
   it("parseSearch maps layoutList to AppInfo[]", () => {
@@ -47,5 +62,44 @@ describe("appstore parsers", () => {
   it("parseSearch tolerates empty/missing fields", () => {
     expect(parseSearch({})).toEqual([]);
     expect(parseSearch({ layoutList: [] })).toEqual([]);
+  });
+});
+
+describe("appstore.searchApp", () => {
+  it("returns parsed apps from httpJson online", async () => {
+    vi.mocked(httpJson).mockResolvedValue({ ok: true, status: 200, json: fx("search-weixin.json") });
+    const r = await searchApp({ query: "微信" });
+    expect(r.ok).toBe(true);
+    expect(r.apps).toHaveLength(2);
+    expect(r.source).toBe("online");
+    expect(r.apps[0].name).toBe("微信");
+  });
+
+  it("exact filter keeps only exact name matches (case-insensitive)", async () => {
+    vi.mocked(httpJson).mockResolvedValue({ ok: true, status: 200, json: fx("search-weixin.json") });
+    const r = await searchApp({ query: "微信", exact: true });
+    expect(r.apps.map((a) => a.name)).toEqual(["微信"]);
+  });
+
+  it("respects limit", async () => {
+    vi.mocked(httpJson).mockResolvedValue({ ok: true, status: 200, json: fx("search-weixin.json") });
+    const r = await searchApp({ query: "微信", limit: 1 });
+    expect(r.apps).toHaveLength(1);
+  });
+
+  it("returns partial source with empty apps on network failure", async () => {
+    vi.mocked(httpJson).mockResolvedValue({ ok: false, status: 0, error: "ENOTFOUND" });
+    const r = await searchApp({ query: "微信" });
+    expect(r.ok).toBe(true);
+    expect(r.apps).toEqual([]);
+    expect(r.source).toBe("partial");
+    expect(r.note).toContain("fetch failed");
+  });
+
+  it("caches results within TTL (second call skips httpJson)", async () => {
+    vi.mocked(httpJson).mockResolvedValue({ ok: true, status: 200, json: fx("search-weixin.json") });
+    await searchApp({ query: "微信" });
+    await searchApp({ query: "微信" });
+    expect(vi.mocked(httpJson)).toHaveBeenCalledTimes(1);
   });
 });

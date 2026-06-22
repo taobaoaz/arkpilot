@@ -119,3 +119,37 @@ export function parseDetail(raw: any): AppInfo | null {
   const item = raw?.appInfo ? raw : { appInfo: raw };
   return mapItem(item);
 }
+
+export async function searchApp(input: SearchInput): Promise<SearchResult> {
+  const limit = input.limit ?? 10;
+  const cacheKey = `search:${input.query}:${limit}:${input.exact ?? false}`;
+  const fetchedAt = new Date().toISOString();
+
+  return withCache(cacheKey, async () => {
+    await rateLimit();
+    const url = `${BASE}/app/search?keyword=${encodeURIComponent(input.query)}&pageSize=${limit}`;
+    const res = await retryWithBackoff(() => httpJson(url));
+    if (!res.ok || !res.json) {
+      return {
+        ok: true,
+        apps: [],
+        source: "partial",
+        note: `fetch failed: ${res.error ?? res.status}`,
+        fetchedAt,
+      };
+    }
+    let apps = parseSearch(res.json);
+    if (input.exact) {
+      const q = input.query.toLowerCase();
+      apps = apps.filter((a) => a.name.toLowerCase() === q);
+    }
+    apps = apps.slice(0, limit);
+    return { ok: true, apps, source: "online", fetchedAt };
+  });
+}
+
+/** 测试用:清空缓存与限速状态。 */
+export function _resetAppstoreStateForTest(): void {
+  cache.clear();
+  lastReqAt = 0;
+}
