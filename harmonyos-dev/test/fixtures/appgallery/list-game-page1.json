@@ -1,17 +1,28 @@
 {
-  "layoutList": [
+  "rtnCode": 0,
+  "totalPages": 1,
+  "count": 1,
+  "hasNextPage": 0,
+  "layoutData": [
     {
-      "appInfo": {
-        "appId": "C20001",
-        "name": "王者荣耀",
-        "packageName": "com.tencent.tmgp.pubgmhd",
-        "developer": "Tencent",
-        "icon": "https://appimg.dbankcdn.com/pvp.png"
-      },
-      "productUrl": "/app/C20001"
+      "name": "游戏",
+      "layoutName": "horizonhomecard",
+      "dataList": [
+        {
+          "name": "热门游戏",
+          "hasNextPage": 0,
+          "list": [
+            {
+              "name": "王者荣耀",
+              "package": "com.tencent.tmgp.pubgmhd",
+              "ID": "c20001000100010001000100010001001",
+              "icon": "https://appimg-drcn.dbankcdn.com/application/icon144/pvp.png",
+              "downCountDesc": "30 亿次安装",
+              "detailId": "app|C20001__category__game"
+            }
+          ]
+        }
+      ]
     }
-  ],
-  "total": 1,
-  "page": 1,
-  "pageSize": 20
+  ]
 }

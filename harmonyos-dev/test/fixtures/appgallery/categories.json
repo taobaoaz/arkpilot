@@ -1,8 +1,8 @@
 {
-  "categoryList": [
-    { "id": "game", "name": "游戏" },
-    { "id": "social", "name": "社交" },
-    { "id": "tools", "name": "工具" },
-    { "id": "education", "name": "教育" }
+  "tabInfo": [
+    { "tabId": "tab_game", "name": "游戏", "titleType": "tab", "tabCode": "game" },
+    { "tabId": "tab_social", "name": "社交", "titleType": "tab", "tabCode": "social" },
+    { "tabId": "tab_tools", "name": "工具", "titleType": "tab", "tabCode": "tools" },
+    { "tabId": "tab_education", "name": "教育", "titleType": "tab", "tabCode": "education" }
   ]
 }

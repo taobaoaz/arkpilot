@@ -13,7 +13,74 @@ import type {
   CheckResult,
 } from "./appstore.types.js";
 
-const BASE = "https://appgallery.huawei.com";
+// 校准后的真实 AppGallery 接口(spec §10 开放问题,2026-06-22 抓包确认)。
+// webEdge 入口(env.js 的 webEdge.baseUrl_north.china),统一 GET /uowap/index + params.method。
+const API_BASE = "https://web-drcn.hispace.dbankcloud.com/edge/uowap/index";
+const WEB_BASE = "https://appgallery.huawei.com";
+const SERVICE_TYPE = 20;
+const MAX_RESULTS = 25;
+
+/** 构造真实接口 URL:GET /uowap/index + query params。 */
+function buildApiUrl(method: string, extra: Record<string, string> = {}): string {
+  const params = new URLSearchParams({
+    method,
+    serviceType: String(SERVICE_TYPE),
+    maxResults: String(MAX_RESULTS),
+    zone: "",
+    locale: "zh",
+    ...extra,
+  });
+  return `${API_BASE}?${params.toString()}`;
+}
+
+/**
+ * 浏览器降级:webEdge 接口需 InterfaceCode 签名,纯 HTTP 会被 403(rtnCode 1002)。
+ * 用 Playwright 加载真实页面,拦截 getTabDetail 的 JSON 响应返回。
+ * Playwright 未安装时返回 null(调用方降级为 partial)。
+ */
+async function fetchViaBrowser(pageUrl: string, timeoutMs = 45000): Promise<any | null> {
+  let chromium: any;
+  try {
+    ({ chromium } = await import("playwright"));
+  } catch {
+    return null; // playwright 未安装
+  }
+  let browser: any;
+  try {
+    browser = await chromium.launch({ headless: true });
+    const page = await browser.newPage();
+    let captured: any = null;
+    page.on("response", async (r: any) => {
+      if (!captured && r.url().includes("getTabDetail")) {
+        try {
+          const t = await r.text();
+          if (t.trim().startsWith("{")) captured = JSON.parse(t);
+        } catch {
+          /* ignore */
+        }
+      }
+    });
+    await page.goto(pageUrl, { waitUntil: "networkidle", timeout: timeoutMs }).catch(() => {});
+    await page.waitForTimeout(3000);
+    return captured;
+  } finally {
+    if (browser) await browser.close().catch(() => {});
+  }
+}
+
+/** 测试 hook:允许单测替换浏览器降级,避免启动真实 Chromium。 */
+export const _testHooks = {
+  fetchViaBrowser,
+};
+
+/** 判断 httpJson 结果是否因签名/反爬失效(403 或 rtnCode 1002)。 */
+function isBlockedBySignature(res: { ok: boolean; json?: any }): boolean {
+  if (res.ok) {
+    const code = res.json?.rtnCode;
+    return code === 1002 || code === "1002";
+  }
+  return true; // 非 200 也视为需降级
+}
 
 // 限速令牌桶(模块级):默认 1 req/s + 随机抖动
 const MIN_INTERVAL_MS = 1000;
@@ -58,11 +125,18 @@ async function retryWithBackoff<T>(
   return last!;
 }
 
-/** 把 productUrl('/app/C10001') 补全为绝对 URL。 */
-function absUrl(productUrl?: string): string {
-  if (!productUrl) return "";
-  if (productUrl.startsWith("http")) return productUrl;
-  return BASE + (productUrl.startsWith("/") ? productUrl : "/" + productUrl);
+/** 把 appId(C10001) 补全为 AppGallery 详情页绝对 URL。 */
+function detailWebUrl(appId?: string): string {
+  if (!appId) return "";
+  return `${WEB_BASE}/app/${appId}`;
+}
+
+/** 从 detailId('app|C10001__search__x') 提取可读 appId。 */
+function appIdFromDetailId(detailId?: string): string | undefined {
+  if (!detailId) return undefined;
+  // 'app|C10001__...' -> 'C10001'
+  const m = detailId.match(/app\|([A-Za-z0-9]+)/);
+  return m?.[1];
 }
 
 /** 任意结构里按一组候选 key 取字符串值。 */
@@ -74,35 +148,54 @@ function pick(obj: any, keys: string[]): string | undefined {
   return undefined;
 }
 
-/** 单个 layoutList/appInfo 条目 → AppInfo。 */
-function mapItem(item: any): AppInfo | null {
-  const info = item?.appInfo ?? item;
+/** 单个应用条目 → AppInfo。字段名经真实接口校准(2026-06-22)。 */
+function mapItem(info: any): AppInfo | null {
   const name = pick(info, ["name", "appName", "title"]);
-  const url = absUrl(pick(item, ["productUrl"]) ?? pick(info, ["productUrl", "url"]));
-  if (!name || !url) return null;
+  if (!name) return null;
+  const appId = pick(info, ["appid", "appId"]) ?? appIdFromDetailId(pick(info, ["detailId"])) ?? pick(info, ["ID", "id"]);
+  const url = detailWebUrl(appId);
+  if (!url) return null;
   return {
     name,
-    pkg: pick(info, ["packageName", "pkg", "bundleName"]),
-    appId: pick(info, ["appId", "id"]),
-    dev: pick(info, ["developer", "dev", "developerName"]),
+    pkg: pick(info, ["package", "packageName", "pkg", "bundleName"]),
+    appId,
+    dev: pick(info, ["developerName", "developer", "dev", "companyName", "authorName"]),
     icon: pick(info, ["icon", "iconUrl", "logo"]),
-    category: pick(info, ["categoryName", "category"]),
+    category: pick(info, ["kindName", "categoryName", "category", "tagName"]),
     url,
   };
 }
 
+/** 真实结构:layoutData[].dataList[].list[] 才是 app 数组。 */
+function extractApps(raw: any): AppInfo[] {
+  const layoutData = raw?.layoutData ?? raw?.data?.layoutData ?? [];
+  if (!Array.isArray(layoutData)) return [];
+  const out: AppInfo[] = [];
+  for (const layout of layoutData) {
+    const dataList = layout?.dataList ?? [];
+    if (!Array.isArray(dataList)) continue;
+    for (const dl of dataList) {
+      const apps = dl?.list ?? dl?.appList ?? (Array.isArray(dl) ? dl : []);
+      if (!Array.isArray(apps)) continue;
+      for (const a of apps) {
+        const mapped = mapItem(a);
+        if (mapped) out.push(mapped);
+      }
+    }
+  }
+  return out;
+}
+
 export function parseSearch(raw: any): AppInfo[] {
-  const list = raw?.layoutList ?? raw?.data?.layoutList ?? [];
-  if (!Array.isArray(list)) return [];
-  return list.map(mapItem).filter((a): a is AppInfo => a !== null);
+  return extractApps(raw);
 }
 
 export function parseCategories(raw: any): Category[] {
-  const list = raw?.categoryList ?? raw?.data?.categoryList ?? [];
+  const list = raw?.tabInfo ?? raw?.categoryList ?? raw?.data?.categoryList ?? [];
   if (!Array.isArray(list)) return [];
   return list
     .map((c: any) => {
-      const id = pick(c, ["id", "categoryId", "code"]);
+      const id = pick(c, ["tabId", "tabCode", "id", "categoryId", "code"]);
       const name = pick(c, ["name", "categoryName"]);
       if (!id || !name) return null;
       return { id, name };
@@ -111,13 +204,14 @@ export function parseCategories(raw: any): Category[] {
 }
 
 export function parseList(raw: any): AppInfo[] {
-  // 结构与 search 一致(layoutList)
-  return parseSearch(raw);
+  // 结构与 search 一致(layoutData[].dataList[].list[])
+  return extractApps(raw);
 }
 
 export function parseDetail(raw: any): AppInfo | null {
-  const item = raw?.appInfo ? raw : { appInfo: raw };
-  return mapItem(item);
+  // 详情页结构与列表一致,取第一个 app。
+  const apps = extractApps(raw);
+  return apps[0] ?? null;
 }
 
 export async function searchApp(input: SearchInput): Promise<SearchResult> {
@@ -127,24 +221,42 @@ export async function searchApp(input: SearchInput): Promise<SearchResult> {
 
   return withCache(cacheKey, async () => {
     await rateLimit();
-    const url = `${BASE}/app/search?keyword=${encodeURIComponent(input.query)}&pageSize=${limit}`;
+    // 搜索固定 uri=app|search;keyword 经 currentUrl 传递(真实 SPA 行为)。
+    const currentUrl = `${WEB_BASE}/app/search?keyword=${encodeURIComponent(input.query)}`;
+    const url = buildApiUrl("internal.getTabDetail", {
+      reqPageNum: "1",
+      uri: "app|search",
+      appid: "search",
+      currentUrl: encodeURIComponent(currentUrl),
+    });
     const res = await retryWithBackoff(() => httpJson(url));
-    if (!res.ok || !res.json) {
-      return {
-        ok: true,
-        apps: [],
-        source: "partial",
-        note: `fetch failed: ${res.error ?? res.status}`,
-        fetchedAt,
-      };
+    let json = res.json;
+    let source: "online" | "partial" = "online";
+    let note: string | undefined;
+    if (!res.ok || !res.json || isBlockedBySignature(res)) {
+      // 纯 HTTP 被签名校验拦截,降级到浏览器。
+      const browserJson = await _testHooks.fetchViaBrowser(currentUrl);
+      if (browserJson) {
+        json = browserJson;
+        source = "online";
+        note = "via browser fallback";
+      } else {
+        return {
+          ok: true,
+          apps: [],
+          source: "partial",
+          note: `fetch failed: ${res.error ?? res.status}; browser fallback unavailable (install playwright)`,
+          fetchedAt,
+        };
+      }
     }
-    let apps = parseSearch(res.json);
+    let apps = parseSearch(json);
     if (input.exact) {
       const q = input.query.toLowerCase();
       apps = apps.filter((a) => a.name.toLowerCase() === q);
     }
     apps = apps.slice(0, limit);
-    return { ok: true, apps, source: "online", fetchedAt };
+    return { ok: true, apps, source, note, fetchedAt };
   });
 }
 
@@ -158,7 +270,8 @@ export async function listCategories(): Promise<CategoriesResult> {
   const fetchedAt = new Date().toISOString();
   return withCache("categories", async () => {
     await rateLimit();
-    const res = await retryWithBackoff(() => httpJson(`${BASE}/app/categoryList`));
+    const url = buildApiUrl("internal.getTemplate");
+    const res = await retryWithBackoff(() => httpJson(url));
     if (!res.ok || !res.json) {
       return { ok: true, categories: [], source: "partial", note: `fetch failed: ${res.error ?? res.status}`, fetchedAt };
     }
@@ -173,28 +286,36 @@ export async function listByCategory(input: ListByCategoryInput): Promise<ListRe
   const fetchedAt = new Date().toISOString();
   return withCache(cacheKey, async () => {
     await rateLimit();
-    const url = `${BASE}/app/listByCategory?categoryId=${encodeURIComponent(input.category)}&page=${page}&pageSize=${pageSize}`;
+    // uri=分类 tabId(来自 listCategories 的 tabInfo)。
+    const url = buildApiUrl("internal.getTabDetail", {
+      reqPageNum: String(page),
+      uri: input.category,
+    });
     const res = await retryWithBackoff(() => httpJson(url));
     if (!res.ok || !res.json) {
       return { ok: true, apps: [], page, pageSize, source: "partial", note: `fetch failed: ${res.error ?? res.status}`, fetchedAt };
     }
     const apps = parseList(res.json);
-    const total = (res.json as any)?.total ?? 0;
-    const totalPages = total > 0 ? Math.ceil(total / pageSize) : undefined;
+    const totalPages = (res.json as any)?.totalPages;
     return { ok: true, apps, page, pageSize, totalPages, source: "online", fetchedAt };
   });
 }
 
 export async function getDetail(input: DetailInput): Promise<DetailResult> {
   const fetchedAt = new Date().toISOString();
-  const target = input.url ?? (input.appId ? `${BASE}/app/${input.appId}` : "");
-  if (!target) {
+  const appId = input.appId ?? (input.url ? input.url.split("/").pop() : undefined);
+  if (!appId) {
     return { ok: false, app: null, source: "partial", note: "need appId or url", fetchedAt };
   }
-  const cacheKey = `detail:${target}`;
+  const cacheKey = `detail:${appId}`;
   return withCache(cacheKey, async () => {
     await rateLimit();
-    const res = await retryWithBackoff(() => httpJson(`${target}/detail`));
+    // uri=app|<appId>;详情页用 getTabDetail 拉。
+    const url = buildApiUrl("internal.getTabDetail", {
+      reqPageNum: "1",
+      uri: `app|${appId}`,
+    });
+    const res = await retryWithBackoff(() => httpJson(url));
     if (!res.ok || !res.json) {
       return { ok: true, app: null, source: "partial", note: `fetch failed: ${res.error ?? res.status}`, fetchedAt };
     }
@@ -203,7 +324,7 @@ export async function getDetail(input: DetailInput): Promise<DetailResult> {
 }
 
 export async function checkSource(): Promise<CheckResult> {
-  const res = await httpJson(`${BASE}/app/categoryList`, { timeout: 8000 });
+  const res = await httpJson(buildApiUrl("internal.getTemplate"), { timeout: 8000 });
   let browser_fallback = false;
   try {
     await import("playwright");
