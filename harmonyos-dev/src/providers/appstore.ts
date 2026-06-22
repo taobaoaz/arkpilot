@@ -38,30 +38,64 @@ function buildApiUrl(method: string, extra: Record<string, string> = {}): string
  * 用 Playwright 加载真实页面,拦截 getTabDetail 的 JSON 响应返回。
  * Playwright 未安装时返回 null(调用方降级为 partial)。
  */
-async function fetchViaBrowser(pageUrl: string, timeoutMs = 45000): Promise<any | null> {
+async function fetchViaBrowser(
+  pageUrl: string,
+  opts: { searchKeyword?: string; timeoutMs?: number } = {},
+): Promise<any | null> {
   let chromium: any;
   try {
     ({ chromium } = await import("playwright"));
   } catch {
     return null; // playwright 未安装
   }
+  const timeoutMs = opts.timeoutMs ?? 45000;
   let browser: any;
   try {
     browser = await chromium.launch({ headless: true });
     const page = await browser.newPage();
     let captured: any = null;
     page.on("response", async (r: any) => {
-      if (!captured && r.url().includes("getTabDetail")) {
-        try {
-          const t = await r.text();
-          if (t.trim().startsWith("{")) captured = JSON.parse(t);
-        } catch {
-          /* ignore */
+      const u = r.url();
+      if (captured) return;
+      try {
+        const t = await r.text();
+        if (!t.trim().startsWith("{")) return;
+        // 搜索场景:只取 completeSearchWord(精确匹配 app)
+        if (opts.searchKeyword) {
+          if (u.includes("completeSearchWord")) {
+            const j = JSON.parse(t);
+            if (j?.app?.detailId) {
+              captured = { kind: "exact-app", payload: j.app };
+            }
+          }
+          return; // 搜索时忽略 getTabDetail(可能是相关推荐)
         }
+        // 非搜索:取首个 getTabDetail JSON(分类列表/详情)
+        if (u.includes("getTabDetail")) {
+          captured = { kind: "tab-detail", payload: JSON.parse(t) };
+        }
+      } catch {
+        /* ignore */
       }
     });
-    await page.goto(pageUrl, { waitUntil: "networkidle", timeout: timeoutMs }).catch(() => {});
-    await page.waitForTimeout(3000);
+    // 若提供了 searchKeyword,优先在首页触发联想(首页搜索框空,无预填)。
+    const targetUrl = opts.searchKeyword ? WEB_BASE : pageUrl;
+    await page.goto(targetUrl, { waitUntil: "domcontentloaded", timeout: timeoutMs }).catch(() => {});
+    if (opts.searchKeyword) {
+      try {
+        await page.waitForSelector("input", { timeout: 10000 }).catch(() => null);
+        const input = await page.$("input").catch(() => null);
+        if (input) {
+          await input.click();
+          await input.fill("");
+          await input.type(opts.searchKeyword, { delay: 100 });
+          await page.waitForTimeout(3500);
+        }
+      } catch {
+        /* 输入触发失败时忽略,继续返回已捕获的 getTabDetail。 */
+      }
+    }
+    await page.waitForTimeout(1500);
     return captured;
   } finally {
     if (browser) await browser.close().catch(() => {});
@@ -230,16 +264,24 @@ export async function searchApp(input: SearchInput): Promise<SearchResult> {
       currentUrl: encodeURIComponent(currentUrl),
     });
     const res = await retryWithBackoff(() => httpJson(url));
-    let json = res.json;
+    let json: any = res.json;
     let source: "online" | "partial" = "online";
     let note: string | undefined;
     if (!res.ok || !res.json || isBlockedBySignature(res)) {
-      // 纯 HTTP 被签名校验拦截,降级到浏览器。
-      const browserJson = await _testHooks.fetchViaBrowser(currentUrl);
-      if (browserJson) {
-        json = browserJson;
+      // 纯 HTTP 被签名校验拦截,降级到浏览器(输入关键词触发联想 API)。
+      const browserResult = await _testHooks.fetchViaBrowser(currentUrl, { searchKeyword: input.query });
+      if (browserResult) {
+        if (browserResult.kind === "exact-app" && browserResult.payload) {
+          // 精确匹配:completeSearchWord 的 app 字段
+          const app = mapItem(browserResult.payload);
+          if (app) {
+            const apps = [app];
+            return { ok: true, apps, source: "online", note: "exact match via browser fallback", fetchedAt };
+          }
+        }
+        json = browserResult.payload;
         source = "online";
-        note = "via browser fallback";
+        note = "via browser fallback (related)";
       } else {
         return {
           ok: true,
@@ -292,12 +334,23 @@ export async function listByCategory(input: ListByCategoryInput): Promise<ListRe
       uri: input.category,
     });
     const res = await retryWithBackoff(() => httpJson(url));
-    if (!res.ok || !res.json) {
-      return { ok: true, apps: [], page, pageSize, source: "partial", note: `fetch failed: ${res.error ?? res.status}`, fetchedAt };
+    let json: any = res.json;
+    let source: "online" | "partial" = "online";
+    let note: string | undefined;
+    if (!res.ok || !res.json || isBlockedBySignature(res)) {
+      // 降级:浏览器直接访问分类页(URL 用 query 模拟 tabId,实际 web 版通常以 query 或 hash 表达)
+      const pageUrl = `${WEB_BASE}/app/${encodeURIComponent(input.category)}`;
+      const browserResult = await _testHooks.fetchViaBrowser(pageUrl);
+      if (browserResult?.kind === "tab-detail") {
+        json = browserResult.payload;
+        note = "via browser fallback";
+      } else {
+        return { ok: true, apps: [], page, pageSize, source: "partial", note: `fetch failed: ${res.error ?? res.status}; browser fallback unavailable`, fetchedAt };
+      }
     }
-    const apps = parseList(res.json);
-    const totalPages = (res.json as any)?.totalPages;
-    return { ok: true, apps, page, pageSize, totalPages, source: "online", fetchedAt };
+    const apps = parseList(json);
+    const totalPages = json?.totalPages;
+    return { ok: true, apps, page, pageSize, totalPages, source, note, fetchedAt };
   });
 }
 
@@ -316,10 +369,20 @@ export async function getDetail(input: DetailInput): Promise<DetailResult> {
       uri: `app|${appId}`,
     });
     const res = await retryWithBackoff(() => httpJson(url));
-    if (!res.ok || !res.json) {
-      return { ok: true, app: null, source: "partial", note: `fetch failed: ${res.error ?? res.status}`, fetchedAt };
+    let json: any = res.json;
+    let source: "online" | "partial" = "online";
+    let note: string | undefined;
+    if (!res.ok || !res.json || isBlockedBySignature(res)) {
+      const pageUrl = `${WEB_BASE}/app/${appId}`;
+      const browserResult = await _testHooks.fetchViaBrowser(pageUrl);
+      if (browserResult?.kind === "tab-detail") {
+        json = browserResult.payload;
+        note = "via browser fallback";
+      } else {
+        return { ok: true, app: null, source: "partial", note: `fetch failed: ${res.error ?? res.status}; browser fallback unavailable`, fetchedAt };
+      }
     }
-    return { ok: true, app: parseDetail(res.json), source: "online", fetchedAt };
+    return { ok: true, app: parseDetail(json), source, note, fetchedAt };
   });
 }
 

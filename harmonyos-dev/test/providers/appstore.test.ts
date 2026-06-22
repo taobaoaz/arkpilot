@@ -106,12 +106,37 @@ describe("appstore.searchApp", () => {
 
   it("falls back to browser when HTTP blocked by signature (403/1002)", async () => {
     vi.mocked(httpJson).mockResolvedValue({ ok: true, status: 403, json: { rtnCode: 1002 } });
-    _testHooks.fetchViaBrowser = async () => fx("search-weixin.json");
+    _testHooks.fetchViaBrowser = async () => ({ kind: "tab-detail", payload: fx("search-weixin.json") });
     const r = await searchApp({ query: "微信" });
     expect(r.ok).toBe(true);
     expect(r.apps).toHaveLength(2);
     expect(r.source).toBe("online");
     expect(r.note).toContain("browser fallback");
+  });
+
+  it("prefers exact-app match from completeSearchWord browser capture", async () => {
+    vi.mocked(httpJson).mockResolvedValue({ ok: true, status: 403, json: { rtnCode: 1002 } });
+    const exactApp = {
+      name: "微信",
+      package: "com.tencent.mm",
+      appid: "C5683",
+      detailId: "app|C5683__search__微信__qsearch__1",
+      icon: "https://appimg-drcn.dbankcdn.com/application/icon144/weixin-real.png",
+    };
+    _testHooks.fetchViaBrowser = async () => ({ kind: "exact-app", payload: exactApp });
+    const r = await searchApp({ query: "微信" });
+    expect(r.ok).toBe(true);
+    expect(r.apps).toHaveLength(1);
+    expect(r.apps[0]).toEqual({
+      name: "微信",
+      pkg: "com.tencent.mm",
+      appId: "C5683",
+      dev: undefined,
+      icon: "https://appimg-drcn.dbankcdn.com/application/icon144/weixin-real.png",
+      url: "https://appgallery.huawei.com/app/C5683",
+      category: undefined,
+    });
+    expect(r.note).toContain("exact match");
   });
 
   it("caches results within TTL (second call skips httpJson)", async () => {
