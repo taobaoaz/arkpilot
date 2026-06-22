@@ -16,7 +16,7 @@ export async function httpJson(
   try {
     const res = await fetch(url, {
       signal: ctrl.signal,
-      headers: { "User-Agent": "ZCode-harmonyos-dev-plugin/0.1.0", ...opts.headers },
+      headers: { "User-Agent": "ZCode-harmonyos-dev-plugin/0.2.0", ...opts.headers },
     });
     if (!res.ok) return { ok: false, status: res.status, error: `HTTP ${res.status}` };
     const json = await res.json();
@@ -45,7 +45,7 @@ export async function httpText(
   try {
     const res = await fetch(url, {
       signal: ctrl.signal,
-      headers: { "User-Agent": "ZCode-harmonyos-dev-plugin/0.1.0", ...opts.headers },
+      headers: { "User-Agent": "ZCode-harmonyos-dev-plugin/0.2.0", ...opts.headers },
     });
     if (!res.ok) return { ok: false, status: res.status, error: `HTTP ${res.status}` };
     const text = await res.text();
